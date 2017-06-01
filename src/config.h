@@ -133,6 +133,7 @@ struct ProvisionConfig {
 struct UptaneConfig {
   UptaneConfig()
       : primary_ecu_serial(""),
+        primary_ecu_hardware_id(""),
         ostree_server(""),
         director_server(""),
         repo_server(""),
@@ -141,6 +142,7 @@ struct UptaneConfig {
         public_key_path("ecukey.pub"),
         disable_keyid_validation(false) {}
   std::string primary_ecu_serial;
+  std::string primary_ecu_hardware_id;
   std::string ostree_server;
   std::string director_server;
   std::string repo_server;
@@ -161,6 +163,9 @@ class Config {
   void updateFromToml(const std::string& filename);
   void updateFromTomlString(const std::string& contents);
   void updateFromCommandLine(const boost::program_options::variables_map& cmd);
+  std::string getUptaneRepoServer();
+  std::string getUptaneDirectorServer();
+  std::string getOstreeRepoServer();
 
   // config data structures
   CoreConfig core;

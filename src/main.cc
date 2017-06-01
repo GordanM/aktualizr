@@ -62,6 +62,12 @@ bpo::variables_map parse_options(int argc, char *argv[]) {
       ("gateway-socket", bpo::value<bool>(), "enable the socket gateway")
       ("gateway-dbus", bpo::value<bool>(), "enable the D-Bus gateway")
       ("dbus-system-bus", "Use the D-Bus system bus (rather than the session bus)")
+      ("tls-server", bpo::value<std::string>(), "url, used for auto provisioning")
+      ("repo-server", bpo::value<std::string>(), "url of the uptane repo repository")
+      ("director-server", bpo::value<std::string>(), "url of the uptane director repository")
+      ("ostree-server", bpo::value<std::string>(), "url of the ostree repository")
+      ("primary-ecu-serial", bpo::value<std::string>(), "serial number of primary ecu")
+      ("primary-ecu-hardware-id", bpo::value<std::string>(), "hardware id of primary ecu")
       ("disable-keyid-validation", "Disable keyid validation on client side" );
   // clang-format on
 

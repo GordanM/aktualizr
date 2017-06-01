@@ -16,8 +16,8 @@ namespace Uptane {
 
 Repository::Repository(const Config &config_in)
     : config(config_in),
-      director("director", config.uptane.director_server, config),
-      image("repo", config.uptane.repo_server, config),
+      director("director", config.getUptaneDirectorServer(), config),
+      image("repo", config.getUptaneRepoServer(), config),
       http() {}
 
 void Repository::updateRoot() {
@@ -58,7 +58,7 @@ void Repository::putManifest(const Json::Value &custom) {
                .toEcuVersion(custom));
   version_manifest["ecu_version_manifest"].append(ecu_version_signed);
   Json::Value tuf_signed = sign(version_manifest);
-  http.put(config.uptane.director_server + "/manifest", Json::FastWriter().write(tuf_signed));
+  http.put(config.getUptaneDirectorServer() + "/manifest", Json::FastWriter().write(tuf_signed));
 }
 
 std::vector<Uptane::Target> Repository::getNewTargets() {
@@ -151,8 +151,8 @@ bool Repository::ecuRegister() {
   pub_key_str = boost::replace_all_copy(pub_key_str, "\n", "\\n");
 
   std::string data = "{\"primary_ecu_serial\":\"" + config.uptane.primary_ecu_serial +
-                     "\", \"ecus\":[{\"hardware_identifier\":\"" + config.device.uuid + "\",\"ecu_serial\":\"" +
-                     config.uptane.primary_ecu_serial +
+                     "\", \"ecus\":[{\"hardware_identifier\":\"" + config.uptane.primary_ecu_hardware_id +
+                     "\",\"ecu_serial\":\"" + config.uptane.primary_ecu_serial +
                      "\", \"clientKey\": {\"keytype\": \"RSA\", \"keyval\": {\"public\": \"" + pub_key_str + "\"}}}]}";
 
   authenticate();

@@ -200,10 +200,52 @@ void Config::updateFromCommandLine(const boost::program_options::variables_map& 
   if (cmd.count("disable-keyid-validation") != 0) {
     uptane.disable_keyid_validation = true;
   }
+  if (cmd.count("primary-ecu-serial") != 0) {
+    uptane.primary_ecu_serial = cmd["primary-ecu-serial"].as<std::string>();
+  }
+  if (cmd.count("primary-ecu-hardware-id") != 0) {
+    uptane.primary_ecu_hardware_id = cmd["primary-ecu-hardware-id"].as<std::string>();
+  }
+  if (cmd.count("tls-server") != 0) {
+    tls.server = cmd["tls-server"].as<std::string>();
+  }
+  if (cmd.count("repo-server") != 0) {
+    uptane.repo_server = cmd["repo-server"].as<std::string>();
+  }
+  if (cmd.count("director-server") != 0) {
+    uptane.director_server = cmd["director-server"].as<std::string>();
+  }
+  if (cmd.count("ostree-server") != 0) {
+    uptane.ostree_server = cmd["ostree-server"].as<std::string>();
+  }
 }
 
 void DeviceConfig::createCertificatesPath() {
   if (boost::filesystem::create_directories(certificates_path)) {
     LOGGER_LOG(LVL_info, "certificates_path directory has been created");
+  }
+}
+
+std::string Config::getUptaneRepoServer() {
+  if (!uptane.repo_server.size()) {
+    return tls.server + "/repo";
+  } else {
+    return uptane.repo_server;
+  }
+}
+
+std::string Config::getUptaneDirectorServer() {
+  if (!uptane.director_server.size()) {
+    return tls.server + "/director";
+  } else {
+    return uptane.director_server;
+  }
+}
+
+std::string Config::getOstreeRepoServer() {
+  if (!uptane.ostree_server.size()) {
+    return tls.server + "/treehub";
+  } else {
+    return uptane.ostree_server;
   }
 }
