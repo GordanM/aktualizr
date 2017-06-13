@@ -62,20 +62,23 @@ bool Ostree::addRemote(OstreeRepo *repo, const std::string &remote, const std::s
     g_variant_builder_add(&b, "{s@v}", "tls-ca-path",
                           g_variant_new_variant(g_variant_new_string(cred.ca_file.c_str())));
   }
-  options = g_variant_builder_end(&b);
+  options = g_variant_ref_sink ( g_variant_builder_end(&b) );
 
   if (!ostree_repo_remote_change(repo, NULL, OSTREE_REPO_REMOTE_CHANGE_DELETE_IF_EXISTS, remote.c_str(), url.c_str(),
                                  options, cancellable, &error)) {
     LOGGER_LOG(LVL_error, "Error of adding remote: " << error->message);
+    g_variant_unref(options);
     g_error_free(error);
     return false;
   }
   if (!ostree_repo_remote_change(repo, NULL, OSTREE_REPO_REMOTE_CHANGE_ADD_IF_NOT_EXISTS, remote.c_str(), url.c_str(),
                                  options, cancellable, &error)) {
     LOGGER_LOG(LVL_error, "Error of adding remote: " << error->message);
+    g_variant_unref(options);
     g_error_free(error);
     return false;
   }
+  g_variant_unref(options);
   return true;
 }
 
