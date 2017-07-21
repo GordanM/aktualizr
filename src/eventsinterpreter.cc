@@ -41,12 +41,10 @@ void EventsInterpreter::run() {
         *commands_channel << boost::shared_ptr<command::StartDownload>(new command::StartDownload(update->requestId));
       }
     }
-#ifdef BUILD_OSTREE
     else if (event->variant == "UptaneTargetsUpdated") {
-      *commands_channel << boost::make_shared<command::OstreeInstall>(
+      *commands_channel << boost::make_shared<command::UptaneInstall>(
           static_cast<event::UptaneTargetsUpdated*>(event.get())->packages);
     }
-#endif
     else if (event->variant == "UpdateAvailable") {
       *commands_channel << boost::make_shared<command::StartDownload>(
           static_cast<event::UpdateAvailable*>(event.get())->update_vailable.update_id);

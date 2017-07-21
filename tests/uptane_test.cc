@@ -465,9 +465,14 @@ TEST(SotaUptaneClientTest, RunForeverInstall) {
   event::Channel *events_channel = new event::Channel();
   command::Channel *commands_channel = new command::Channel();
 
-  std::vector<OstreePackage> packages_to_install;
-  packages_to_install.push_back(OstreePackage("test1", "test2", "test3", "test4"));
-  *commands_channel << boost::make_shared<command::OstreeInstall>(packages_to_install);
+  std::vector<Uptane::Target> packages_to_install;
+  Json::Value ot_json;
+  ot_json["ecu_serial"] = "test1";
+  ot_json["ref_name"] = "test2";
+  ot_json["description"] = "test3";
+  ot_json["pull_uri"] = "test4";
+  packages_to_install.push_back(UptaneTarget("testostree", ot_json));
+  *commands_channel << boost::make_shared<command::UptaneInstall>(packages_to_install);
   *commands_channel << boost::make_shared<command::Shutdown>();
   SotaUptaneClient up(conf, events_channel);
   up.runForever(commands_channel);
