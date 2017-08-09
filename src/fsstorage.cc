@@ -15,18 +15,9 @@ FSStorage::~FSStorage() {
   // TODO: clear director_files, image_files
 }
 
-void FSStorage::storeEcu(bool is_primary, const std::string& hardware_id __attribute__((unused)),
-                         const std::string& ecu_id, const std::string& public_key, const std::string& private_key) {
-  boost::filesystem::path public_key_path;
-  boost::filesystem::path private_key_path;
-
-  if (is_primary) {
-    public_key_path = config_.uptane.public_key_path;
-    private_key_path = config_.uptane.private_key_path;
-  } else {
-    public_key_path = config_.tls.certificates_directory / (ecu_id + ".pub");
-    private_key_path = config_.tls.certificates_directory / (ecu_id + ".priv");
-  }
+void FSStorage::storePrimaryKeys(const std::string& public_key, const std::string& private_key) {
+  boost::filesystem::path public_key_path = config_.uptane.public_key_path;
+  boost::filesystem::path private_key_path = config_.uptane.private_key_path;
 
   boost::filesystem::remove(public_key_path);
   boost::filesystem::remove(private_key_path);
@@ -37,24 +28,20 @@ void FSStorage::storeEcu(bool is_primary, const std::string& hardware_id __attri
   sync();
 }
 
-bool FSStorage::loadEcuKeys(bool is_primary, const std::string& hardware_id __attribute__((unused)),
-                            const std::string& ecu_id, std::string* public_key, std::string* private_key) {
-  boost::filesystem::path public_key_path;
-  boost::filesystem::path private_key_path;
-
-  if (is_primary) {
-    public_key_path = config_.uptane.public_key_path;
-    private_key_path = config_.uptane.private_key_path;
-  } else {
-    public_key_path = config_.tls.certificates_directory / (ecu_id + ".pub");
-    private_key_path = config_.tls.certificates_directory / (ecu_id + ".priv");
-  }
+bool FSStorage::loadPrimaryKeys(std::string* public_key, std::string* private_key) {
+  boost::filesystem::path public_key_path = config_.uptane.public_key_path;
+  boost::filesystem::path private_key_path = config_.uptane.private_key_path;
 
   if (!boost::filesystem::exists(public_key_path) || !boost::filesystem::exists(private_key_path)) return false;
 
   if (public_key) *public_key = Utils::readFile(public_key_path.native());
   if (private_key) *private_key = Utils::readFile(private_key_path.native());
   return true;
+}
+
+void FSStorage::clearPrimaryKeys() {
+  boost::filesystem::remove(config_.uptane.public_key_path);
+  boost::filesystem::remove(config_.uptane.private_key_path);
 }
 
 void FSStorage::storeTlsCredsCommon(const boost::filesystem::path& ca_path, const boost::filesystem::path& cert_path,
@@ -70,14 +57,6 @@ void FSStorage::storeTlsCredsCommon(const boost::filesystem::path& ca_path, cons
 
   sync();
 }
-
-void FSStorage::storeBootstrapTlsCreds(const std::string& ca, const std::string& cert, const std::string& pkey) {
-  boost::filesystem::path ca_path = config_.tls.certificates_directory / "bootstrap_ca.pem";
-  boost::filesystem::path cert_path = config_.tls.certificates_directory / "bootstrap_cert.pem";
-  boost::filesystem::path pkey_path = config_.tls.certificates_directory / "bootstrap_pkey.pem";
-  storeTlsCredsCommon(ca_path, cert_path, pkey_path, ca, cert, pkey);
-}
-
 void FSStorage::storeTlsCreds(const std::string& ca, const std::string& cert, const std::string& pkey) {
   boost::filesystem::path ca_path = config_.tls.certificates_directory / config_.tls.ca_file;
   boost::filesystem::path cert_path = config_.tls.certificates_directory / config_.tls.client_certificate;
@@ -99,18 +78,17 @@ bool FSStorage::loadTlsCredsCommon(const boost::filesystem::path& ca_path, const
   return false;
 }
 
-bool FSStorage::loadBootstrapTlsCreds(std::string* ca, std::string* cert, std::string* pkey) {
-  boost::filesystem::path ca_path = config_.tls.certificates_directory / "bootstrap_ca.pem";
-  boost::filesystem::path cert_path = config_.tls.certificates_directory / "bootstrap_cert.pem";
-  boost::filesystem::path pkey_path = config_.tls.certificates_directory / "bootstrap_pkey.pem";
-  return loadTlsCredsCommon(ca_path, cert_path, pkey_path, ca, cert, pkey);
-}
-
 bool FSStorage::loadTlsCreds(std::string* ca, std::string* cert, std::string* pkey) {
   boost::filesystem::path ca_path = config_.tls.certificates_directory / config_.tls.ca_file;
   boost::filesystem::path cert_path = config_.tls.certificates_directory / config_.tls.client_certificate;
   boost::filesystem::path pkey_path = config_.tls.certificates_directory / config_.tls.pkey_file;
   return loadTlsCredsCommon(ca_path, cert_path, pkey_path, ca, cert, pkey);
+}
+
+void FSStorage::clearTlsCreds() {
+  boost::filesystem::remove(config_.tls.certificates_directory / config_.tls.ca_file);
+  boost::filesystem::remove(config_.tls.certificates_directory / config_.tls.client_certificate);
+  boost::filesystem::remove(config_.tls.certificates_directory / config_.tls.pkey_file);
 }
 
 void FSStorage::storeMetadata(const Uptane::MetaPack& metadata) {
@@ -168,4 +146,55 @@ bool FSStorage::loadMetadata(Uptane::MetaPack* metadata) {
   metadata->image_snapshot = Uptane::Snapshot(json);
 
   return true;
+}
+
+void FSStorage::storeDeviceId(const std::string& device_id) {
+	Utils::writeFile((config_.tls.certificates_directory / "device_id").native(), device_id);
+}
+
+bool FSStorage::loadDeviceId(std::string* device_id) {
+  if (!boost::filesystem::exists((config_.tls.certificates_directory / "device_id").native()))
+    return false;
+
+  *device_id = Utils::readFile((config_.tls.certificates_directory / "device_id").native());
+  return true;
+}
+
+void FSStorage::clearDeviceId() {
+	boost::filesystem::remove(config_.tls.certificates_directory / "device_id");
+}
+
+void FSStorage::storeEcuRegistered() {
+	Utils::writeFile((config_.tls.certificates_directory / "is_registered").native(), std::string("1"));
+}
+
+bool FSStorage::loadEcuRegistered() {
+  return boost::filesystem::exists((config_.tls.certificates_directory / "is_registered").native());
+}
+
+void FSStorage::clearEcuRegistered() {
+  boost::filesystem::remove(config_.tls.certificates_directory / "is_registered");
+}
+
+void FSSTorage::storeEcuSerials(const std::vector<std::pair<std::string, std::string> >& serials) {
+  if(serials.size >= 1) {
+	  Utils::writeFile((config_.tls.certificates_directory / "primary_ecu_serial").native(), serials[0].first);
+	  Utils::writeFile((config_.tls.certificates_directory / "primary_hardware_id").native(), serials[0].second);
+
+	  std::vector<std::pair<std::string, std::string> >::const_iterator it;
+	  std::ofsteam file((config_.tls.certificates_directory / "secondaries_list").native());
+	  for(it = serials.begin() + 1; it != serials.end(); it++)
+		  // Assuming that there are no tabs and linebreaks in serials and hardware ids
+		  file << it->first << "\t" << it->second << "\n";
+	  file.close();
+  }
+}
+
+void FSStorage::loadEcuSerials(std::vector<std::pair<std::string, std::string> >* serials) {
+	std::string buf;
+	std::ifsteam file((config_.tls.certificates_directory / "secondaries_list").native());
+	while(std::getline(file, buf)) {
+		int tab = buf.find("\t");
+		
+	}
 }
