@@ -91,6 +91,7 @@ void SotaUptaneClient::runForever(command::Channel *commands_channel) {
         Json::Value unsigned_ecu_version =
             OstreePackage::getEcu(uptane_repo.primary_ecu_serial, config.ostree.sysroot).toEcuVersion(Json::nullValue);
         uptane_repo.putManifest(uptane_repo.getCurrentVersionManifests(unsigned_ecu_version));
+	// Steps 1,3, 4(only non-OSTree) of UPTANE 8.1, step 2 (time) is not implemented yet
         std::pair<int, std::vector<Uptane::Target> > updates = uptane_repo.getTargets();
         if (updates.second.size() && updates.first > last_targets_version) {
           LOGGER_LOG(LVL_info, "got new updates");
@@ -104,11 +105,15 @@ void SotaUptaneClient::runForever(command::Channel *commands_channel) {
         std::vector<Uptane::Target> updates = command->toChild<command::UptaneInstall>()->packages;
         std::vector<Uptane::Target> primary_updates = findForEcu(updates, uptane_repo.primary_ecu_serial);
         Json::Value manifests(Json::arrayValue);
+	// TODO: both primary and secondary updates should be split into sequence of stages specified by UPTANE:
+	//   4 - download all the images and verify them against the metadata (for OSTree - pull without deploying)
+	//   6 - send metadata to all the ECUs
+	//   7 - send images to ECUs (deploy for OSTree)
         manifests = uptane_repo.updateSecondaries(updates);
         if (primary_updates.size()) {
           // assuming one OSTree OS per primary => there can be only one OSTree update
-          for (std::vector<Uptane::Target>::const_iterator it = primary_updates.begin(); it != primary_updates.end();
-               ++it) {
+	  std::vector<Uptane::Target>::const_iterator it;
+          for (it = primary_updates.begin(); it != primary_updates.end(); ++it) {
             // treat empty format as OSTree for backwards compatibility
             if ((it->format().empty() || it->format() == "OSTREE") && !isInstalled(*it)) {
               Json::Value p_manifest = OstreeInstall(uptaneToOstree(*it));
@@ -118,6 +123,7 @@ void SotaUptaneClient::runForever(command::Channel *commands_channel) {
           }
           // TODO: other updates for primary
         }
+	// TODO: this step seems to be not required by UPTANE
         uptane_repo.putManifest(manifests);
 
       } else if (command->variant == "Shutdown") {

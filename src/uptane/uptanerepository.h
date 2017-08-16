@@ -31,6 +31,7 @@ class Repository {
   bool putManifest(const Json::Value &version_manifests);
   Json::Value getCurrentVersionManifests(const Json::Value &version_manifests);
   // void addSecondary(const std::string &ecu_serial, const std::string &hardware_identifier);
+  //Json::Value getVersionManifest(Json::Value custom = Json::Value(Json::nullValue));
   Json::Value updateSecondaries(const std::vector<Uptane::Target> &secondary_targets);
   std::pair<int, std::vector<Uptane::Target> > getTargets();
 
@@ -39,12 +40,9 @@ class Repository {
   void initReset();
   // TODO: only used by tests, rewrite test and delete this method
   void updateRoot(Version version = Version());
+  // TODO: Receive and update time nonces.
 
  private:
-  struct SecondaryConfig {
-    std::string ecu_serial;
-    std::string ecu_hardware_id;
-  };
   Config config;
   TufRepository director;
   TufRepository image;
@@ -56,9 +54,6 @@ class Repository {
   std::string primary_public_key;
   std::string primary_private_key;
 
-  std::vector<Secondary> secondaries;
-  TestBusPrimary transport;
-  friend class TestBusSecondary;
   friend class ::SotaUptaneClient;
   bool verifyMeta(const Uptane::MetaPack &meta);
   bool getMeta();

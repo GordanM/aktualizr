@@ -115,6 +115,7 @@ class Target {
   std::string ecu_identifier() const { return ecu_identifier_; }
   std::string filename() const { return filename_; }
   std::string format() const { return type_; }
+  std::vector<Hash> hashes() const {return hashes_; };
 
   bool MatchWith(const Hash &hash) const;
 
