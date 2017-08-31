@@ -115,8 +115,7 @@ struct UptaneConfig {
         repo_server(""),
         metadata_path(""),
         private_key_path("ecukey.pem"),
-        public_key_path("ecukey.pub"),
-        disable_keyid_validation(false) {}
+        public_key_path("ecukey.pub") {}
   bool polling;
   unsigned long long polling_sec;
   std::string device_id;
@@ -128,7 +127,6 @@ struct UptaneConfig {
   boost::filesystem::path metadata_path;
   std::string private_key_path;
   std::string public_key_path;
-  bool disable_keyid_validation;
   std::vector<Uptane::SecondaryConfig> secondaries;
 };
 
