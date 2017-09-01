@@ -926,6 +926,8 @@ TEST(SotaUptaneClientTest, implicit_incomplete) {
   config.tls.ca_file = "ca.pem";
   config.tls.client_certificate = "client.pem";
   config.tls.pkey_file = "pkey.pem";
+  config.uptane.device_id = "device_id";
+  config.postUpdateValues();
   FSStorage storage(config);
   HttpFake http(uptane_test_dir);
   Uptane::Repository uptane(config, storage, http);
