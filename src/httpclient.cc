@@ -1,6 +1,9 @@
 #include "httpclient.h"
 
 #include <assert.h>
+#include <libp11.h>
+#include <openssl/crypto.h>
+#include <openssl/engine.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/opensslv.h>
@@ -10,6 +13,7 @@
 #include <openssl/rsa.h>
 #include <openssl/ssl.h>
 #include <sys/stat.h>
+#include <boost/lexical_cast.hpp>
 #include <boost/move/make_unique.hpp>
 #include <boost/move/utility.hpp>
 
@@ -106,6 +110,82 @@ void HttpClient::setCerts(const std::string& ca, const std::string& cert, const 
   tls_ca_file = boost::move_if_noexcept(tmp_ca_file);
   tls_cert_file = boost::move_if_noexcept(tmp_cert_file);
   tls_pkey_file = boost::move_if_noexcept(tmp_pkey_file);
+}
+
+bool HttpClient::setPkcs11(const std::string& module, const std::string& pass, const std::string& certid,
+                           const std::string& ca) {
+  std::string certname;
+
+  // Get certificate name
+  try {
+    P11ContextWrapper ctx(module);
+    P11SlotsWrapper slots(ctx.get());
+    PKCS11_SLOT* slot = PKCS11_find_token(ctx.get(), slots.get_slots(), slots.get_nslots());
+    if (!slot || !slot->token) {
+      LOGGER_LOG(LVL_error, "Couldn't find pkcs11 token");
+      return false;
+    }
+    int slot_ind = (((uintptr_t)slot) - ((uintptr_t)slots.get_slots())) / sizeof(slots.get_slots()[0]);
+    certname = std::string("slot_") + boost::lexical_cast<std::string>(slot_ind) + "-id_";
+    for (int i = 0; i < certid.length(); i++) {
+      unsigned char nibble = certid[i] >> 4;
+      if (nibble >= 10)
+        certname.append(1, (nibble - 10) + 'a');
+      else
+        certname.append(1, nibble + '0');
+
+      nibble = certid[i] & 0x0F;
+      if (nibble >= 10)
+        certname.append(1, (nibble - 10) + 'a');
+      else
+        certname.append(1, nibble + '0');
+    }
+    // TODO: a) will we store root CA in the token as well?
+    //       b) does this set private key?
+  } catch (...) {
+    return false;
+  }
+
+  ENGINE_load_builtin_engines();
+#if AKTUALIZR_OPENSSL_AFTER_11
+  OPENSSL_init_crypto(OPENSSL_INIT_ENGINE_OPENSSL, NULL);
+#else
+// TODO: how to initialize SSL engine in 1.0.2?
+#endif
+  // TODO: support reinitialization
+  ssl_engine = ENGINE_by_id("pkcs11");
+  if (!ssl_engine) return false;
+  if (!ENGINE_ctrl_cmd_string(ssl_engine, "SO_PATH", kPkcs11Path, 0) ||
+      !ENGINE_ctrl_cmd_string(ssl_engine, "ID", "pkcs11", 0) ||
+      !ENGINE_ctrl_cmd_string(ssl_engine, "LIST_ADD", "1", 0) || !ENGINE_ctrl_cmd_string(ssl_engine, "LOAD", NULL, 0) ||
+      !ENGINE_ctrl_cmd_string(ssl_engine, "MODULE_PATH", module.c_str(), 0) ||
+      !ENGINE_ctrl_cmd_string(ssl_engine, "PIN", pass.c_str(), 0)) {
+    LOGGER_LOG(LVL_error, "Engine command failed");
+    return false;
+  }
+
+  if (!ENGINE_init(ssl_engine)) {
+    LOGGER_LOG(LVL_error, "Engine initialization failed");
+    return false;
+  }
+
+  curl_easy_setopt(curl, CURLOPT_SSLCERT, certname);
+  curl_easy_setopt(curl, CURLOPT_SSLKEY, certname);
+  curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
+  curl_easy_setopt(curl, CURLOPT_USE_SSL, CURLUSESSL_ALL);
+  curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1);
+  curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2);
+  curl_easy_setopt(curl, CURLOPT_SSLENGINE, "pkcs11");
+  curl_easy_setopt(curl, CURLOPT_SSLKEYTYPE, "ENG");
+  curl_easy_setopt(curl, CURLOPT_SSLCERTTYPE, "ENG");
+  curl_easy_setopt(curl, CURLOPT_SSLENGINE_DEFAULT, 1L);
+
+  // Root CA is not stored in the pkcs11 device
+  boost::movelib::unique_ptr<TemporaryFile> tmp_ca_file = boost::movelib::make_unique<TemporaryFile>("tls-ca");
+  tmp_ca_file->PutContents(ca);
+  curl_easy_setopt(curl, CURLOPT_CAINFO, tmp_ca_file->Path().c_str());
+  tls_ca_file = boost::move_if_noexcept(tmp_ca_file);
+  return true;
 }
 
 HttpResponse HttpClient::post(const std::string& url, const Json::Value& data) {

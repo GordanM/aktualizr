@@ -22,7 +22,8 @@ enum InitRetCode {
   INIT_RET_SERVER_FAILURE,
   INIT_RET_STORAGE_FAILURE,
   INIT_RET_SECONDARY_FAILURE,
-  INIT_RET_BAD_P12
+  INIT_RET_BAD_P12,
+  INIT_RET_PKCS11_FAILURE
 };
 const int MaxInitializationAttempts = 3;
 class Repository {
@@ -71,7 +72,7 @@ class Repository {
   void resetEcuSerials();
   bool initEcuKeys();
   void resetEcuKeys();
-  InitRetCode initTlsCreds(const ProvisionConfig &provision_config);
+  InitRetCode initTlsCreds(const ProvisionConfig &provision_config, const TlsConfig &tls_config);
   void resetTlsCreds();
   InitRetCode initEcuRegister();
   void setEcuSerialsMembers(const std::vector<std::pair<std::string, std::string> > &ecu_serials);

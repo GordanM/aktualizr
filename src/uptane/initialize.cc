@@ -154,55 +154,72 @@ void Repository::resetEcuKeys() {
 }
 
 // Postcondition: TLS credentials are in the storage
-InitRetCode Repository::initTlsCreds(const ProvisionConfig& provision_config) {
-  std::string pkey;
-  std::string cert;
-  std::string ca;
-  if (storage.loadTlsCreds(&ca, &cert, &pkey)) {
-    LOGGER_LOG(LVL_trace, "Device already registered, proceeding");
+InitRetCode Repository::initTlsCreds(const ProvisionConfig& provision_config, const TlsConfig& tls_config) {
+  if (tls_config.pkcs11_module.empty()) {
+    // first authentication method: with TLS credentials stored on disk
+    std::string pkey;
+    std::string cert;
+    std::string ca;
+    if (storage.loadTlsCreds(&ca, &cert, &pkey)) {
+      LOGGER_LOG(LVL_trace, "Device already registered, proceeding");
+      // set provisioned credentials
+      http.setCerts(ca, cert, pkey);
+      return INIT_RET_OK;
+    } else if (provision_config.mode == kImplicit) {
+      LOGGER_LOG(LVL_error, "Implicit provisioning credentials not found.");
+      return INIT_RET_STORAGE_FAILURE;
+    }
+    // set bootstrap credentials
+    Bootstrap boot(provision_config.provision_path, provision_config.p12_password);
+    http.setCerts(boot.getCa(), boot.getCert(), boot.getPkey());
+
+    Json::Value data;
+    std::string device_id;
+    if (!storage.loadDeviceId(&device_id)) {
+      LOGGER_LOG(LVL_error, "device_id unknown during autoprovisioning process");
+      return INIT_RET_STORAGE_FAILURE;
+    }
+    data["deviceId"] = device_id;
+    data["ttl"] = provision_config.expiry_days;
+    HttpResponse response = http.post(provision_config.server + "/devices", data);
+    if (!response.isOk()) {
+      Json::Value resp_code = response.getJson()["code"];
+      if (resp_code.isString() && resp_code.asString() == "device_already_registered") {
+        LOGGER_LOG(LVL_error, "Device id" << device_id << "is occupied");
+        return INIT_RET_OCCUPIED;
+      } else {
+        LOGGER_LOG(LVL_error, "Autoprovisioning failed, response: " << response.body);
+        return INIT_RET_SERVER_FAILURE;
+      }
+    }
+
+    FILE* device_p12 = fmemopen(const_cast<char*>(response.body.c_str()), response.body.size(), "rb");
+    if (!Crypto::parseP12(device_p12, "", &pkey, &cert, &ca)) {
+      return INIT_RET_BAD_P12;
+    }
+    fclose(device_p12);
+    storage.storeTlsCreds(ca, cert, pkey);
+
     // set provisioned credentials
     http.setCerts(ca, cert, pkey);
+
+    // TODO: acknowledgement to the server
+    LOGGER_LOG(LVL_info, "Provisioned successfully on Device Gateway");
     return INIT_RET_OK;
-  } else if (provision_config.mode == kImplicit) {
-    throw std::runtime_error("Implicit provisioning credentials not found.");
-  }
-  // set bootstrap credentials
-  Bootstrap boot(provision_config.provision_path, provision_config.p12_password);
-  http.setCerts(boot.getCa(), boot.getCert(), boot.getPkey());
-
-  Json::Value data;
-  std::string device_id;
-  if (!storage.loadDeviceId(&device_id)) {
-    LOGGER_LOG(LVL_error, "device_id unknown during autoprovisioning process");
-    return INIT_RET_STORAGE_FAILURE;
-  }
-  data["deviceId"] = device_id;
-  data["ttl"] = provision_config.expiry_days;
-  HttpResponse response = http.post(provision_config.server + "/devices", data);
-  if (!response.isOk()) {
-    Json::Value resp_code = response.getJson()["code"];
-    if (resp_code.isString() && resp_code.asString() == "device_already_registered") {
-      LOGGER_LOG(LVL_error, "Device id" << device_id << "is occupied");
-      return INIT_RET_OCCUPIED;
-    } else {
-      LOGGER_LOG(LVL_error, "Autoprovisioning failed, response: " << response.body);
-      return INIT_RET_SERVER_FAILURE;
+  } else {
+    // second authentication method: with PKCS#11 device
+    std::string ca;
+    // to be discussed, CA may also be stored in PKCS#11 device
+    if (!storage.loadTlsCa(&ca)) {
+      LOGGER_LOG(LVL_error, "Root CA not found.");
+      return INIT_RET_STORAGE_FAILURE;
     }
+    if (!http.setPkcs11(tls_config.pkcs11_module, tls_config.pkcs11_pass, tls_config.pkcs11_certid, ca)) {
+      LOGGER_LOG(LVL_error, "Root CA not found.");
+      return INIT_RET_PKCS11_FAILURE;
+    }
+    return INIT_RET_OK;
   }
-
-  FILE* device_p12 = fmemopen(const_cast<char*>(response.body.c_str()), response.body.size(), "rb");
-  if (!Crypto::parseP12(device_p12, "", &pkey, &cert, &ca)) {
-    return INIT_RET_BAD_P12;
-  }
-  fclose(device_p12);
-  storage.storeTlsCreds(ca, cert, pkey);
-
-  // set provisioned credentials
-  http.setCerts(ca, cert, pkey);
-
-  // TODO: acknowledgement to the server
-  LOGGER_LOG(LVL_info, "Provisioned successfully on Device Gateway");
-  return INIT_RET_OK;
 }
 
 void Repository::resetTlsCreds() {
@@ -286,7 +303,7 @@ bool Repository::initialize() {
       LOGGER_LOG(LVL_error, "ECU key generation failed, abort initialization");
       return false;
     }
-    InitRetCode ret_code = initTlsCreds(config.provision);
+    InitRetCode ret_code = initTlsCreds(config.provision, config.tls);
     // if a device with the same ID has already been registered to the server, repeat the whole registration process
     if (ret_code == INIT_RET_OCCUPIED) {
       resetEcuKeys();

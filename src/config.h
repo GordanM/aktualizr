@@ -93,6 +93,9 @@ struct TlsConfig {
   std::string ca_file;
   std::string pkey_file;
   std::string client_certificate;
+  std::string pkcs11_module;
+  std::string pkcs11_pass;
+  std::string pkcs11_certid;
 };
 
 struct ProvisionConfig {
